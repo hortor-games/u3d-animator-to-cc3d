@@ -62,6 +62,7 @@ export class RuntimeAnimatorController {
   private parameterValues: { [idx: string]: number | boolean } = {};
 
   layers: RuntimeAnimatorControllerLayer[];
+  private layersNameMap: { [idx: string]: RuntimeAnimatorControllerLayer };
 
   constructor(animationSource: IAnimationSource, src: AnimatorController | any) {
     this.animationSource = animationSource;
@@ -69,6 +70,8 @@ export class RuntimeAnimatorController {
     this.preprocessAsset(src);
 
     this.layers = this.asset.layers.map(layer => new RuntimeAnimatorControllerLayer(this, layer));
+    this.layersNameMap = {};
+    this.layers.forEach(l => this.layersNameMap[l.asset.name] = l);
   }
 
   private preprocessAsset(src: AnimatorController) {
@@ -147,12 +150,12 @@ export class RuntimeAnimatorController {
     return !!this.parameterValues[name];
   }
 
-  getParameterAsset(name: string): AnimatorControllerParameter {
-    return this.asset.parametersMap[name];
-  }
-
   setParameter(name: string, value: number | boolean) {
     this.parameterValues[name] = value;
+  }
+
+  getParameterAsset(name: string): AnimatorControllerParameter {
+    return this.asset.parametersMap[name];
   }
 
   setTrigger(name: string) {
@@ -162,6 +165,22 @@ export class RuntimeAnimatorController {
   update(dt: number) {
     this.blendInfoDirty = true;
     this.layers.forEach(p => p.update(dt));
+  }
+
+  play(stateName: string, normalizedTime: number = 0) {
+    let l = this.layersNameMap[stateName.split(".")[0]];
+    if (!l) {
+      return;
+    }
+    l.play(stateName, normalizedTime);
+  }
+
+  crossFade(stateName: string, hasFixedDuration:boolean, transitionDuration: number, timeOffset: number = 0, normalizedTransitionTime: number = 0) {
+    let l = this.layersNameMap[stateName.split(".")[0]];
+    if (!l) {
+      return;
+    }
+    l.crossFade(stateName, hasFixedDuration, transitionDuration, timeOffset, normalizedTransitionTime);
   }
 }
 
@@ -223,6 +242,45 @@ class RuntimeAnimatorControllerLayer {
 
   getFirstState(sm: AnimatorStateMachine): AnimatorState {
     return sm && sm.defaultState;
+  }
+
+  private _tmpTrans: AnimatorStateTransition;
+  private get tmpTrans(): AnimatorStateTransition {
+    return this._tmpTrans || (this._tmpTrans = <any>{});
+  }
+
+  play(stateName: string, normalizedTime: number) {
+    let state = this.ctr.asset.statesNameMap[stateName];
+    if (!state) {
+      return;
+    }
+    if (state === this.curState.asset) {
+      this.midState.time = this.curState.time = normalizedTime;
+      return;
+    }
+    let tmpTrans = this.tmpTrans;
+    tmpTrans.duration = 0;
+    this.curState.curTrans.reset(this.curState, tmpTrans);
+    this.nextState.reset(state);
+    this.nextStep = RuntimeAnimatorControllerLayer.STEP_RUN;
+    this.update(0);
+  }
+
+  crossFade(stateName: string, hasFixedDuration: boolean, transitionDuration: number, timeOffset: number = 0, normalizedTransitionTime: number = 0) {
+    let state = this.ctr.asset.statesNameMap[stateName];
+    if (!state) {
+      return;
+    }
+    let tmpTrans = this.tmpTrans;
+    tmpTrans.hasFixedDuration = hasFixedDuration;
+    tmpTrans.duration = transitionDuration;
+    tmpTrans.offset = timeOffset;
+    tmpTrans.destinationState = state;
+    this.curState.curTrans.reset(this.curState, tmpTrans);
+    this.curState.transTime = normalizedTransitionTime;
+    this.nextState.reset(state);
+    this.nextStep = RuntimeAnimatorControllerLayer.STEP_TRANS;
+    this.update(0);
   }
 
 

@@ -27,7 +27,7 @@ export class Animator extends Component implements IAnimationSource {
   private stateMachineBehaviours: { [idx: string]: StateMachineBehaviour[] } = {};
 
   start() {
-    // window["ani"] = this;
+    window["ani"] = this;
     if (this.bonAsset && window["bon"]) {
       if (!(<any>this.bonAsset).json) {
         (<any>this.bonAsset).json = bon.decode(new Uint8Array(this.bonAsset.bytes()));
@@ -38,6 +38,26 @@ export class Animator extends Component implements IAnimationSource {
     }
     this.getComponents(StateBehaviour).forEach(p => this.addStateBehavior(p));
     this.getComponents(StateMachineBehaviour).forEach(p => this.addStateMachineBehavior(p));
+  }
+
+  getNumber(name: string): number {
+    return this.runtimeController.getNumber(name);
+  }
+
+  getBool(name: string): boolean {
+    return this.runtimeController.getBool(name);
+  }
+
+  setParameter(name: string, value: number | boolean) {
+    this.runtimeController.setParameter(name, value);
+  }
+
+  crossFade(stateName: string, normalizedTransitionDuration: number, normalizedTimeOffset: number = 0, normalizedTransitionTime: number = 0) {
+    this.runtimeController.crossFade(stateName, false, normalizedTransitionDuration, normalizedTimeOffset, normalizedTransitionTime);
+  }
+
+  crossFadeInFixedTime(stateName: string, fixedTransitionDuration: number, normalizedTimeOffset: number = 0, normalizedTransitionTime: number = 0) {
+    this.runtimeController.crossFade(stateName, true, fixedTransitionDuration, normalizedTimeOffset, normalizedTransitionTime);
   }
 
   private static readonly NAME = ["", "*"];

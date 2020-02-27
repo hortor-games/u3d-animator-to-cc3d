@@ -110,17 +110,17 @@ export enum TransitionInterruptionSource {
 }
 
 export type AnimatorStateTransition = {
-  readonly duration: number;// = 0;
-  readonly offset: number;// = 0;
-  readonly interruptionSource: TransitionInterruptionSource;// = TransitionInterruptionSource.None;
+  duration: number;// = 0;
+  offset: number;// = 0;
+  interruptionSource: TransitionInterruptionSource;// = TransitionInterruptionSource.None;
   readonly orderedInterruption: boolean;// = false;
   readonly exitTime: number;// = 0;
-  readonly hasExitTime: boolean;// = false;
-  readonly hasFixedDuration: boolean;// = false;
+  hasExitTime: boolean;// = false;
+  hasFixedDuration: boolean;// = false;
   readonly canTransitionToSelf: boolean;// = false;
   readonly solo: boolean;// = false;
   readonly mute: boolean;// = false;
-  readonly isExit: boolean;// = false;
+  isExit: boolean;// = false;
   destinationStateMachine: AnimatorStateMachine;// | number;// = 0;
   destinationState: AnimatorState;// | number;// = 0;
   readonly conditions: AnimatorCondition[];// = [];
