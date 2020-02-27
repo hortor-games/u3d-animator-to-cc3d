@@ -1,0 +1,14 @@
+{
+    "name": "Hortor.Bon",
+    "references": [
+        "GUID:593ba3d9ffc0d884397d8e09a6ee4aed"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

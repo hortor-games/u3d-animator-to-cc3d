@@ -1,0 +1,14 @@
+{
+    "name": "AnimatorControllerExporter",
+    "references": [
+        "GUID:ebe44fda685641442b2ecc6cc58ccc0f"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}
