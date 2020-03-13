@@ -1,6 +1,7 @@
 export type AnimatorController = {
   readonly parameters: AnimatorControllerParameter[];
   readonly layers: AnimatorControllerLayer[];
+  readonly overrides: { [idx: string]: string };
   processed: boolean;
   parametersMap: { [idx: string]: AnimatorControllerParameter };
   stateMachinesHashMap: { [idx: number]: AnimatorStateMachine };

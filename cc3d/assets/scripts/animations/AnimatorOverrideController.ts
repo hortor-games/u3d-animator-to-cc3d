@@ -1,21 +1,21 @@
-import {_decorator, AnimationClip, Component} from "cc";
-import {AnimationClipPair} from "./AnimatorClipPair";
+import { _decorator, AnimationClip, Component } from "cc";
+import { AnimationClipPair } from "./AnimatorClipPair";
 
-const {ccclass, property} = _decorator;
+const { ccclass, property } = _decorator;
 
 @ccclass("AnimatorOverrideController")
 export class AnimatorOverrideController extends Component {
   @property([AnimationClipPair])
   private _clips: AnimationClipPair[] = [];
-  @property({type: [AnimationClipPair]})
-  get clips() {
+  @property({ type: [AnimationClipPair] })
+  private get clips() {
     return this._clips;
   }
 
-  set clips(v: AnimationClipPair[]) {
-    this._clips = v;
-    this._clipMap.clear();
-  }
+  // private set clips(v: AnimationClipPair[]) {
+  //   this._clips = v;
+  //   this._clipMap.clear();
+  // }
 
   private _clipMap: Map<string, AnimationClip> = new Map<string, AnimationClip>();
   private get clipMap(): Map<string, AnimationClip> {
@@ -27,6 +27,10 @@ export class AnimatorOverrideController extends Component {
 
   getClip(name: string): AnimationClip {
     return this.clipMap.get(name);
+  }
+
+  addClip(name: string, clip: AnimationClip) {
+    this.clipMap.set(name, clip);
   }
 }
 

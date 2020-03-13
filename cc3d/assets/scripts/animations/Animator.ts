@@ -1,10 +1,11 @@
-import {_decorator, AnimationComponent, AnimationState, Asset, Component, JsonAsset} from "cc";
-import {BlendInfo, IAnimationSource, RuntimeAnimatorController} from "./RuntimeAnimatorController";
-import {StateBehaviour, StateCallback} from "./StateBehaviour";
-import {StateMachineBehaviour} from "./StateMachineBehaviour";
-import {AnimatorOverrideController} from "./AnimatorOverrideController";
+import { AnimationComponent, AnimationState, Asset, Component, JsonAsset, _decorator } from "cc";
+import { AnimatorOverrideController } from "./AnimatorOverrideController";
+import { BlendInfo, IAnimationSource, RuntimeAnimatorController } from "./RuntimeAnimatorController";
+import { StateBehaviour, StateCallback } from "./StateBehaviour";
+import { StateMachineBehaviour } from "./StateMachineBehaviour";
+import { log } from "cc";
 
-const {ccclass, property, executionOrder} = _decorator;
+const { ccclass, property, executionOrder } = _decorator;
 
 @ccclass("Animator")
 @executionOrder(-100)
@@ -26,6 +27,7 @@ export class Animator extends Component implements IAnimationSource {
   private stateBehaviours: { [idx: string]: StateBehaviour[] } = {};
   private stateMachineBehaviours: { [idx: string]: StateMachineBehaviour[] } = {};
 
+
   start() {
     window["ani"] = this;
     if (this.bonAsset && window["bon"]) {
@@ -35,6 +37,16 @@ export class Animator extends Component implements IAnimationSource {
       this.runtimeController = new RuntimeAnimatorController(this, (<any>this.bonAsset).json);
     } else if (this.jsonAsset) {
       this.runtimeController = new RuntimeAnimatorController(this, this.jsonAsset.json);
+    }
+    let overrids = this.runtimeController.overrids;
+    if (overrids) {
+      if (!this.overrideController) {
+        this.overrideController = this.addComponent(AnimatorOverrideController);
+      }
+      for (let k in overrids) {
+        let state = this.getAnimationState(overrids[k]);
+        this.overrideController.addClip(k, state && state.clip);
+      }
     }
     this.getComponents(StateBehaviour).forEach(p => this.addStateBehavior(p));
     this.getComponents(StateMachineBehaviour).forEach(p => this.addStateMachineBehavior(p));
@@ -54,6 +66,10 @@ export class Animator extends Component implements IAnimationSource {
 
   crossFade(stateName: string, normalizedTransitionDuration: number, normalizedTimeOffset: number = 0, normalizedTransitionTime: number = 0) {
     this.runtimeController.crossFade(stateName, false, normalizedTransitionDuration, normalizedTimeOffset, normalizedTransitionTime);
+  }
+
+  play(stateName: string, normalizedTime: number = 0) {
+    this.runtimeController.play(stateName, normalizedTime);
   }
 
   crossFadeInFixedTime(stateName: string, fixedTransitionDuration: number, normalizedTimeOffset: number = 0, normalizedTransitionTime: number = 0) {
@@ -103,17 +119,26 @@ export class Animator extends Component implements IAnimationSource {
   }
 
   public getAnimationState(name: string): AnimationState {
+    let ani = this.animation;
+    if (!ani) {
+      return;
+    }
+    let state: AnimationState;
     name = this.clipNamePrefix + name;
     let overrideClip = this.overrideController && this.overrideController.getClip(name);
     if (overrideClip) {
-      name = overrideClip.name;
+      name = "*" + name;
+      state = ani.getState(name);
+      if (!state || state.clip != overrideClip) {
+        state = ani.createState(overrideClip, name);
+      }
+    } else {
+      state = ani.getState(name);
     }
-    let ani = this.animation;
-    let state = ani && ani.getState(name);
-    if (state) {
-      return state;
+    if (!state) {
+      return null;
     }
-    return null;
+    return state;
   }
 
   public getClipDuration(name: string): number {
@@ -155,6 +180,7 @@ export class Animator extends Component implements IAnimationSource {
     }
     this.nowPlaying.add(state);
     state.update(info.time * info.duration - state.time);
+    // log(info.time, state.time, state.clip.name);
 
     this.prePlaying.forEach(clip => {
       if (!this.nowPlaying.has(clip)) {

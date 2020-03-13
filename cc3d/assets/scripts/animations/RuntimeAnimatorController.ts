@@ -13,8 +13,8 @@ import {
   TransitionInterruptionSource,
   Vec2
 } from "./AnimatorControllerAsset";
-import {clamp01, log} from "cc";
-import {sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar} from "./BlendTreeUtils";
+import { clamp01, log } from "cc";
+import { sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar } from "./BlendTreeUtils";
 
 export interface IAnimationSource {
   getClipDuration(name: string): number;
@@ -134,6 +134,10 @@ export class RuntimeAnimatorController {
     });
   }
 
+  get overrids(): { [idx: string]: string } {
+    return this.asset.overrides;
+  }
+
   getStateByFullPath(name: string): AnimatorState {
     return this.asset.statesNameMap[name];
   }
@@ -175,7 +179,7 @@ export class RuntimeAnimatorController {
     l.play(stateName, normalizedTime);
   }
 
-  crossFade(stateName: string, hasFixedDuration:boolean, transitionDuration: number, timeOffset: number = 0, normalizedTransitionTime: number = 0) {
+  crossFade(stateName: string, hasFixedDuration: boolean, transitionDuration: number, timeOffset: number = 0, normalizedTransitionTime: number = 0) {
     let l = this.layersNameMap[stateName.split(".")[0]];
     if (!l) {
       return;
@@ -501,7 +505,7 @@ class RuntimeAnimatorState {
     return bt.children[idx].threshold || 0
   }
 
-  private samplePoint: Vec2 = {x: 0, y: 0};
+  private samplePoint: Vec2 = { x: 0, y: 0 };
 
   private fillSamplePoint(bt: BlendTree) {
     this.samplePoint.x = this.ctr.getNumber(bt.blendParameter);
@@ -668,7 +672,7 @@ class RuntimeAnimatorState {
   }
 
   private calcNextTime(dt: number) {
-    this.nextTime = this.time + dt * this.speedByMul / this.duration;
+    this.nextTime = this.time + (this.duration ? dt * this.speedByMul / this.duration : 0);
   }
 
   private checkTrans(dt: number): number {
@@ -699,11 +703,15 @@ class RuntimeAnimatorState {
     }
 
     if (this.transChanged = newTrans && newTrans != this.curTrans) { // 变换变了
-      if (this.curTrans.isValid) {
-        midState.interrupted = true;
-      }
+      let interrupted = this.curTrans.isValid;
       this.curTrans.reset(newTrans.state, newTrans.asset);
-      midState.reset(this.curTrans.state.asset);
+      if (interrupted) {
+        midState.reset(this.curTrans.state.asset);
+        if (nextState.isValid) {
+          midState.time = nextState.time;
+        }
+        midState.interrupted = interrupted;
+      }
       midState.transTime = 0;
       let t = this.curTrans.asset;
       if (t.isExit) {
@@ -769,13 +777,13 @@ class RuntimeAnimatorState {
 
     if (!this.transChanged) {
       let duration = this.curTrans.duration;
-      midState.transTime += this.curTrans.hasFixedDuration ? useTime : useTime * this.midState.speedByMul / midState.duration;
+      midState.transTime += this.curTrans.hasFixedDuration ? useTime : midState.duration ? useTime * this.midState.speedByMul / midState.duration : 0;
       if (midState.transTime >= duration) {//切换
         this.needChange = true;
       }
       if (nextState.isValid) {
-        nextState.time += useTime * nextState.speedByMul / nextState.duration;
-        let p = 1 - clamp01(midState.transTime / duration);
+        nextState.time += nextState.duration ? useTime * nextState.speedByMul / nextState.duration : 0;
+        let p = 1 - clamp01(duration ? midState.transTime / duration : 0);
         this.blendInfo.forEach(v => {
           v.weight *= p;
           return true;
