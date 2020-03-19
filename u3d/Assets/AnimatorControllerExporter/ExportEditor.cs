@@ -20,8 +20,10 @@ namespace Exporter {
 
         [UnityEditor.MenuItem("Assets/AnimatorControllerExporter/ExportJson", priority = 49)]
         public static void ExportAssetToJson() {
-            var go = UnityEditor.Selection.activeObject as GameObject;
-            ExportJson(go);
+            switch (UnityEditor.Selection.activeObject) {
+                case GameObject go: ExportJson(go); break;
+                case UnityEditor.Animations.AnimatorController ac: ExportJson(ac); break;
+            }
         }
 
         static void ExportJson(GameObject go) {
@@ -33,11 +35,15 @@ namespace Exporter {
                 return;
             }
             var ac = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            ExportJson(ac);
+        }
+
+        static void ExportJson(UnityEditor.Animations.AnimatorController ac) {
             if (ac == null) {
                 return;
             }
 
-            var name = go.name;
+            var name = ac.name;
             var path2 = UnityEditor.EditorUtility.SaveFilePanel("导出", path, name, "json");
             if (string.IsNullOrWhiteSpace(path2)) {
                 return;
@@ -56,8 +62,10 @@ namespace Exporter {
 
         [UnityEditor.MenuItem("Assets/AnimatorControllerExporter/ExportBon", priority = 49)]
         public static void ExportAssetToBon() {
-            var go = UnityEditor.Selection.activeObject as GameObject;
-            ExportBon(go);
+            switch (UnityEditor.Selection.activeObject) {
+                case GameObject go: ExportBon(go); break;
+                case UnityEditor.Animations.AnimatorController ac: ExportBon(ac); break;
+            }
         }
 
         static void ExportBon(GameObject go) {
@@ -69,11 +77,15 @@ namespace Exporter {
                 return;
             }
             var ac = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            ExportBon(ac);
+        }
+
+        static void ExportBon(UnityEditor.Animations.AnimatorController ac) {
             if (ac == null) {
                 return;
             }
 
-            var name = go.name;
+            var name = ac.name;
             var path2 = UnityEditor.EditorUtility.SaveFilePanel("导出", path, name, "bin");
             if (string.IsNullOrWhiteSpace(path2)) {
                 return;

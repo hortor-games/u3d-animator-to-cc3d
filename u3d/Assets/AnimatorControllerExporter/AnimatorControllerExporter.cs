@@ -18,7 +18,7 @@ namespace Exporter {
             if (animator == null) {
                 return;
             }
-            var ac = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            var ac = animator.runtimeAnimatorController;
             if (ac == null) {
                 return;
             }
@@ -31,7 +31,7 @@ namespace Exporter {
             if (animator == null) {
                 return;
             }
-            var ac = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            var ac = animator.runtimeAnimatorController;
             if (ac == null) {
                 return;
             }
@@ -45,7 +45,7 @@ namespace Exporter {
             if (animator == null) {
                 return;
             }
-            var ac = animator.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            var ac = animator.runtimeAnimatorController;
             if (ac == null) {
                 return;
             }
