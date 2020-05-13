@@ -1,9 +1,9 @@
-import { AnimationComponent, AnimationState, Asset, Component, JsonAsset, _decorator } from "cc";
+import { AnimationComponent, AnimationState, Asset, Component, JsonAsset, _decorator, SkeletalAnimationComponent, SkeletalAnimationState, AnimationClip, Socket, animation, Node } from "cc";
 import { AnimatorOverrideController } from "./AnimatorOverrideController";
-import { BlendInfo, IAnimationSource, RuntimeAnimatorController } from "./RuntimeAnimatorController";
+import { BlendInfo, IAnimationSource, RuntimeAnimatorController, ExList, LayerBlendInfo } from "./RuntimeAnimatorController";
 import { StateBehaviour, StateCallback } from "./StateBehaviour";
 import { StateMachineBehaviour } from "./StateMachineBehaviour";
-import { log } from "cc";
+import { log, error } from "cc";
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -16,8 +16,6 @@ export class Animator extends Component implements IAnimationSource {
   bonAsset: Asset = null;
   @property(JsonAsset)
   jsonAsset: JsonAsset = null;
-  @property
-  clipNamePrefix: string = "";
   @property(AnimatorOverrideController)
   overrideController: AnimatorOverrideController = null;
   runtimeController: RuntimeAnimatorController;
@@ -27,9 +25,22 @@ export class Animator extends Component implements IAnimationSource {
   private stateBehaviours: { [idx: string]: StateBehaviour[] } = {};
   private stateMachineBehaviours: { [idx: string]: StateMachineBehaviour[] } = {};
 
+  private nameToState: { [idx: string]: AnimationState } = {};
+
+  private useBake: boolean;
+
 
   start() {
     window["ani"] = this;
+    if (!this.animation) {
+      this.animation = this.getComponent(SkeletalAnimationComponent);
+    }
+    if (!this.animation) {
+      error("SkeletalAnimationComponent not found");
+      this.enabled = false;
+      return;
+    }
+    this.useBake = this.animation["useBakedAnimation"];
     if (this.bonAsset && window["bon"]) {
       if (!(<any>this.bonAsset).json) {
         (<any>this.bonAsset).json = bon.decode(new Uint8Array(this.bonAsset.bytes()));
@@ -50,6 +61,21 @@ export class Animator extends Component implements IAnimationSource {
     }
     this.getComponents(StateBehaviour).forEach(p => this.addStateBehavior(p));
     this.getComponents(StateMachineBehaviour).forEach(p => this.addStateMachineBehavior(p));
+    this.animation.stop();
+    this.animation.defaultClip = null;
+    if (!this.useBake) {
+      this.animation["_sockets"].forEach((p: Socket) => {
+        let follow = this.animation.node.getChildByPath(p.path);
+        if (!follow) {
+          return;
+        }
+        for (let i = p.target.children.length; --i >= 0;) {
+          p.target.children[i].setParent(follow, false);
+        }
+        p.target.destroy();
+      });
+      this.animation["_sockets"] = [];
+    }
   }
 
   getNumber(name: string): number {
@@ -62,6 +88,10 @@ export class Animator extends Component implements IAnimationSource {
 
   setParameter(name: string, value: number | boolean) {
     this.runtimeController.setParameter(name, value);
+  }
+
+  setTrigger(name: string) {
+    this.runtimeController.setTrigger(name);
   }
 
   crossFade(stateName: string, normalizedTransitionDuration: number, normalizedTimeOffset: number = 0, normalizedTransitionTime: number = 0) {
@@ -118,26 +148,29 @@ export class Animator extends Component implements IAnimationSource {
     });
   }
 
-  public getAnimationState(name: string): AnimationState {
-    let ani = this.animation;
-    if (!ani) {
-      return;
+  public getAnimationState(name: string, layer: number = 0): AnimationState {
+    let name2 = layer == 0 ? name : name + "~" + layer;
+    let fast = this.nameToState[name2];
+    if (fast !== undefined) {
+      return fast;
     }
-    let state: AnimationState;
-    name = this.clipNamePrefix + name;
+    let ani = this.animation;
+    let name3 = name2;
     let overrideClip = this.overrideController && this.overrideController.getClip(name);
     if (overrideClip) {
-      name = "*" + name;
-      state = ani.getState(name);
-      if (!state || state.clip != overrideClip) {
-        state = ani.createState(overrideClip, name);
+      name3 = "*" + name3;
+    }
+    let state = ani.getState(name3);
+    if (!state) {
+      let clip = overrideClip || ani.clips.find(p => p.name == name);
+      if (clip) {
+        state = ani.createState(clip, name3);
       }
-    } else {
-      state = ani.getState(name);
     }
     if (!state) {
-      return null;
+      state = null;
     }
+    this.nameToState[name2] = state;
     return state;
   }
 
@@ -147,28 +180,39 @@ export class Animator extends Component implements IAnimationSource {
   }
 
   update(dt: number) {
-    if (!this.runtimeController) {
-      return;
-    }
     this.runtimeController.update(dt);
     this.nowPlaying.clear();
     let blendInfo = this.runtimeController.blendInfo;
-    if (blendInfo.length == 0) {
-      return;
-    }
-    let info: BlendInfo;
-    if (blendInfo.length === 1) {
-      info = blendInfo[0];
+    if (this.useBake) {
+      this.updateSimple(blendInfo);
     } else {
-      let max = Number.NEGATIVE_INFINITY;
-      blendInfo.forEach(p => {
-        if (p.weight > max) {
-          max = p.weight;
+      this.updateBlend(blendInfo);
+    }
+
+    this.prePlaying.forEach(state => {
+      if (!this.nowPlaying.has(state)) {
+        state.stop();
+        state.weight = 0;
+        delete (state["_maskInfo"]);
+      }
+    });
+    let tmp = this.prePlaying;
+    this.prePlaying = this.nowPlaying;
+    this.nowPlaying = tmp;
+  }
+
+  private updateSimple(lbis: LayerBlendInfo[]) {
+    let info: BlendInfo;
+    let max = Number.NEGATIVE_INFINITY;
+    lbis.forEach(lbi => {
+      lbi.infos.forEach(p => {
+        let w = p.weight * lbi.weight;
+        if (w >= max) {
+          max = w;
           info = p;
         }
-        return true;
-      });
-    }
+      })
+    });
 
     let state = this.getAnimationState(info.clip);
     if (!state) {
@@ -178,18 +222,28 @@ export class Animator extends Component implements IAnimationSource {
       state.play();
       state.pause();
     }
+    state.weight = 1;
     this.nowPlaying.add(state);
-    state.update(info.time * info.duration - state.time);
-    // log(info.time, state.time, state.clip.name);
+    state.update(info.time * info.duration - state.time)
+  }
 
-    this.prePlaying.forEach(clip => {
-      if (!this.nowPlaying.has(clip)) {
-        clip.stop();
-      }
+  private updateBlend(lbis: LayerBlendInfo[]) {
+    lbis.forEach(lbi => {
+      lbi.infos.forEach(info => {
+        let state = this.getAnimationState(info.clip, lbi.idx);
+        if (!state) {
+          return;
+        }
+        if (!this.prePlaying.has(state)) {
+          state.play();
+          state.pause();
+        }
+        state.weight = info.weight;
+        state["_maskInfo"] = lbi.maskInfo;
+        this.nowPlaying.add(state);
+        state.update(info.time * info.duration - state.time)
+      });
     });
-    let tmp = this.prePlaying;
-    this.prePlaying = this.nowPlaying;
-    this.nowPlaying = tmp;
   }
 }
 

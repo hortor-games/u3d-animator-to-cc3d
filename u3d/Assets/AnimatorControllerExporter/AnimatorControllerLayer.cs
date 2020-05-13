@@ -22,7 +22,7 @@ namespace Exporter {
         public List<AnimatorStateMachine> stateMachines = new List<AnimatorStateMachine>();
         public List<AnimatorState> states = new List<AnimatorState>();
         public int stateMachine;
-        public string avatarMask;
+        public List<string> avatarMask;
         public int blendingMode;
         public int syncedLayerIndex;
         //public bool iKPass;
@@ -56,7 +56,14 @@ namespace Exporter {
             this.parent = ac;
             this.asset = l;
             this.name = l.name;
-            this.avatarMask = l.avatarMask?.name;
+            if (l.avatarMask != null) {
+                this.avatarMask = new List<string>();
+                for (int i = 0; i < l.avatarMask.transformCount; i++) {
+                    if (l.avatarMask.GetTransformActive(i)) {
+                        this.avatarMask.Add(l.avatarMask.GetTransformPath(i));
+                    }
+                }
+            }
             this.stateMachine = new AnimatorStateMachine(this, null, l.stateMachine).id;
             this.blendingMode = (int)l.blendingMode;
             this.syncedLayerIndex = l.syncedLayerIndex;

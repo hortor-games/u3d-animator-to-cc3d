@@ -9,9 +9,18 @@ using UnityEngine;
 
 namespace Exporter {
     public class AnimatorControllerExporter: MonoBehaviour {
+        public AvatarMask mask;
+
         public string debug = "debug.json";
         public string exportJson = "export.json";
         public string exportBon = "export.bin";
+
+        public void Test() {
+            //var animator = GetComponentInChildren<Animator>();
+            //var mask = ((UnityEditor.Animations.AnimatorController)animator.runtimeAnimatorController).layers[1].avatarMask;
+            //Debug.Log(animator);
+            Debug.Log(mask);
+        }
 
         public void TestDebug() {
             var animator = GetComponentInChildren<Animator>();

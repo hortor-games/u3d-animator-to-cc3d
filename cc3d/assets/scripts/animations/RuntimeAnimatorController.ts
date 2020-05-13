@@ -11,10 +11,11 @@ import {
   BlendTree,
   BlendTreeType,
   TransitionInterruptionSource,
-  Vec2
+  Vec2,
+  AnimatorLayerBlendingMode
 } from "./AnimatorControllerAsset";
 import { clamp01, log } from "cc";
-import { sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar } from "./BlendTreeUtils";
+import { sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar, fixPoint } from "./BlendTreeUtils";
 
 export interface IAnimationSource {
   getClipDuration(name: string): number;
@@ -28,31 +29,152 @@ export type BlendInfo = {
   timeScale: number;
 }
 
+export type LayerBlendInfo = {
+  weight: number;
+  maskInfo: { [idx: string]: number };
+  infos: ExList<BlendInfo>;
+  idx: number;
+}
+
 
 export class RuntimeAnimatorController {
   asset: AnimatorController;
   animationSource: IAnimationSource;
   onStateMachineEvent: (evt: string, sm: AnimatorStateMachine) => void;
   onStateEvent: (evt: string, s: RuntimeAnimatorState) => void;
-  private _blendInfo: ExList<BlendInfo> = new ExList<BlendInfo>(() => null);
+  private _blendInfo: LayerBlendInfo[];
   private blendInfoDirty = true;
 
-  get blendInfo(): ExList<BlendInfo> {
-    if (this.blendInfoDirty) {
-      this.blendInfoDirty = false;
-      let infoList = this._blendInfo;
-      infoList.reset();
-      this.layers.forEach(layer => {
-        let idx = infoList.length;
-        infoList.length += layer.curState.blendInfo.length;
-        layer.curState.blendInfo.forEach((info, i) => {
-          info.weight *= layer.asset.defaultWeight || 0;
-          infoList[i + idx] = info;
-          return true;
-        });
-      });
+  // get blendInfo(): ExList<BlendInfo> {
+  //   if (this.blendInfoDirty) {
+  //     this.blendInfoDirty = false;
+  //     let infoList = this._blendInfo;
+  //     infoList.reset();
+  //     this.layers.forEach(layer => {
+  //       let idx = infoList.length;
+  //       infoList.length += layer.curState.blendInfo.length;
+  //       layer.curState.blendInfo.forEach((info, i) => {
+  //         info.weight *= layer.asset.defaultWeight || 0;
+  //         if (info.weight === 0) {
+  //           return true;
+  //         }
+  //         infoList[idx++] = info;
+  //         return true;
+  //       });
+  //       infoList.length = idx;
+  //     });
+  //   }
+  //   return this._blendInfo;
+  // }
+
+  get blendInfo(): LayerBlendInfo[] {
+    if (!this.blendInfoDirty) {
+      return this._blendInfo;
     }
-    return this._blendInfo;
+    this.blendInfoDirty = false;
+
+    //计算缓存key
+    let cacheKey = 0;
+    this.layers.forEach((layer, li) => {
+      if (!layer.asset.defaultWeight) {
+        return;
+      }
+      layer.curState.blendInfo.forEach((info, i) => {
+        if (info.weight === 0) {
+          return;
+        }
+        cacheKey |= 1 << li;
+        return false;
+      });
+    });
+    let lbis: LayerBlendInfo[] = (this.asset["_blendInfos"] || (this.asset["_blendInfos"] = {}))[cacheKey];
+    if (!lbis) { // 创建新的blend信息
+      lbis = [];
+      this.asset["_blendInfos"][cacheKey] = lbis;
+
+      let allMaskBones = [];// 统计所有被使用过的mask骨骼
+      this.layers.forEach((layer, li) => {
+        if (!(cacheKey & (1 << li))) {
+          return;
+        }
+        lbis.push({ idx: li, maskInfo: {}, weight: layer.asset.defaultWeight, infos: new ExList<BlendInfo>(() => null) });
+        let lAsset = layer.asset;
+        if (lAsset.avatarMask && lAsset.avatarMask.length > 0) {
+          allMaskBones.push(...lAsset.avatarMask);
+        }
+      })
+
+      //计算每个参与mask的骨骼在对应层的权重
+      let boneWeightCache = {};
+      allMaskBones.forEach(bone => {
+        let boneCacheKey = 0; // 相同mask层级关系的骨骼直接使用缓存
+        lbis.forEach((lbi, i) => {
+          let lAsset = this.layers[lbi.idx].asset;
+          boneCacheKey |= !lAsset.avatarMaskSet || lAsset.avatarMaskSet.has(bone) ? 1 << lbi.idx : 0;
+        });
+        let bwc = boneWeightCache[boneCacheKey];
+        if (bwc !== undefined) {
+          lbis.forEach(lbi => lbi.maskInfo[bone] = lbi.maskInfo[bwc]);
+          return;
+        }
+        boneWeightCache[boneCacheKey] = bone;
+
+        // 计算骨骼权重
+        let twt = 0;
+        let override = false;
+        for (let i = lbis.length; --i >= 0;) {
+          let lbi = lbis[i];
+          if (override) {
+            lbi.maskInfo[bone] = 0;
+            continue;
+          }
+          let layer = this.layers[lbi.idx].asset;
+          if (boneCacheKey & (1 << lbi.idx)) {
+            lbi.maskInfo[bone] = lbi.weight;
+            twt += lbi.weight;
+            override = ~~layer.blendingMode == AnimatorLayerBlendingMode.Override;
+          }
+        }
+        lbis.forEach(lbi => lbi.maskInfo[bone] = (lbi.maskInfo[bone] || 0) / twt);
+      });
+      //计算其他骨骼在对应层的权重
+      let override = false;
+      let twt = 0;
+      for (let i = lbis.length; --i >= 0;) {
+        let lbi = lbis[i];
+        if (override) {
+          lbi.maskInfo["*"] = 0;
+          continue;
+        }
+        let layer = this.layers[lbi.idx].asset;
+        if (!layer.avatarMask) {
+          lbi.maskInfo["*"] = lbi.weight;
+          twt += lbi.weight;
+          override = ~~layer.blendingMode == AnimatorLayerBlendingMode.Override;
+        }
+      }
+      lbis.forEach(lbi => lbi.maskInfo["*"] = (lbi.maskInfo["*"] || 0) / twt);
+    }
+
+    // 填充权重
+    lbis.forEach(lbi => {
+      let layer = this.layers[lbi.idx];
+      lbi.infos.reset();
+      let twt = 0;
+      layer.curState.blendInfo.forEach(info => {
+        if (info.weight === 0) {
+          return;
+        }
+        lbi.infos.add(info);
+        twt += info.weight;
+      });
+      if (twt !== 1) {
+        lbi.infos.forEach(p => {
+          p.weight /= twt;
+        });
+      }
+    });
+    return lbis;
   }
 
   get parameters(): AnimatorControllerParameter[] {
@@ -92,6 +214,9 @@ export class RuntimeAnimatorController {
 
     src.layers.forEach((layer, i) => {
       layer.idx = i;
+      if (layer.avatarMask) {
+        layer.avatarMaskSet = new Set(layer.avatarMask);
+      }
       layer.stateMachines.forEach(sm => {
         src.stateMachinesHashMap[sm.id] = sm;
       });
@@ -124,6 +249,10 @@ export class RuntimeAnimatorController {
           let state = sm.states[i] = src.statesHashMap[<any>id];
           src.statesNameMap[state.fullPath = (fullPath + "." + state.name)] = state;
           state.stateMachine = sm;
+          if (state.motion && state.motion.type === 1) {
+            let bt = state.motion as BlendTree;
+            bt.children.forEach(c => fixPoint(c.position));
+          }
           // sm.statesMap[state.name] = state;
           state.transitions.forEach(t => processTrans(t));
         });
@@ -212,9 +341,13 @@ export class ExList<T> {
     this.factory = factory;
   }
 
-  forEach(callbackfn: (value: T, index?: number) => boolean, thisArg?: any) {
+  add(v: T) {
+    this[this.length++] = v;
+  }
+
+  forEach(callbackfn: (value: T, index?: number) => boolean | void, thisArg?: any) {
     for (let i = 0; i < this._length; i++) {
-      if (!callbackfn.call(thisArg, this[i], i)) {
+      if (callbackfn.call(thisArg, this[i], i) === false) {
         return;
       }
     }

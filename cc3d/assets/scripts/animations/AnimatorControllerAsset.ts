@@ -44,7 +44,8 @@ export enum AnimatorLayerBlendingMode {
 
 export type AnimatorControllerLayer = {
   name: string;
-  avatarMask: string;
+  readonly avatarMask: string[];
+  avatarMaskSet: Set<string>; // 用于快速判断骨骼是否在mask中
   stateMachine: AnimatorStateMachine;// | number;
   blendingMode: AnimatorLayerBlendingMode;// = AnimatorLayerBlendingMode.Override;
   syncedLayerIndex: number;// = 0;
