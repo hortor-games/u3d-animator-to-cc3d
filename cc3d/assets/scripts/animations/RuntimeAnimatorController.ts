@@ -80,7 +80,7 @@ export class RuntimeAnimatorController {
         return;
       }
       layer.curState.blendInfo.forEach((info, i) => {
-        if (info.weight === 0) {
+        if (info.weight === 0 || info.duration === 0) {
           return;
         }
         cacheKey |= 1 << li;
@@ -162,7 +162,7 @@ export class RuntimeAnimatorController {
       lbi.infos.reset();
       let twt = 0;
       layer.curState.blendInfo.forEach(info => {
-        if (info.weight === 0) {
+        if (info.weight === 0 || info.duration == 0) {
           return;
         }
         lbi.infos.add(info);
@@ -808,22 +808,45 @@ class RuntimeAnimatorState {
     this.nextTime = this.time + (this.duration ? dt * this.speedByMul / this.duration : 0);
   }
 
+  // 根据变化获取下一个状态
+  private findNextState(preState: AnimatorState, trans: AnimatorStateTransition): AnimatorState {
+    if (trans.isExit) {
+      let nextSM = preState.stateMachine.parent ? preState.stateMachine.parent : this.layer.asset.stateMachine;
+      return this.layer.getFirstState(nextSM);
+    } else if (trans.destinationState) {
+      return trans.destinationState;
+    } else if (trans.destinationStateMachine) {
+      return this.layer.getFirstState(trans.destinationStateMachine);
+    }
+    return null;
+  }
+
   private checkTrans(dt: number): number {
     let midState = this.midState;
     let nextState = this.nextState;
     let useTime = dt;
 
     midState.calcNextTime(useTime);
-    let newTrans: RuntimeAnimatorStateTransition = null;
-    if (!this.curTrans.isValid || this.curTrans.interruptionEnabled) { // 当前没有变换或者，可被打断
+    let newTrans: RuntimeAnimatorStateTransition;
+    let newNextState: AnimatorState;
+    if (!this.curTrans.isValid || this.curTrans.interruptionEnabled) { // 当前没有变换或者可被打断,检查新的变换是否有效
       if (this.transitionsDirty) {
         this.transitionsDirty = false;
         this.fillTrans();
       }
       for (let i = 0, len = this.transitions.length; i < len; i++) {
-        let tr = this.transitions[i];
-        if (tr.asset.orderedInterruption && tr == this.curTrans) {
+        let tr: RuntimeAnimatorStateTransition = this.transitions[i];
+        if (tr.asset.orderedInterruption && tr == this.curTrans) { // 跳过当前变换
           break;
+        }
+        if (!tr.asset.canTransitionToSelf) { // 如果不能变换到自身，需要提前查询下一个状态
+          newNextState = this.findNextState(this.curTrans.isValid? this.curTrans.state.asset: midState.asset, tr.asset);
+          if(newNextState && midState.asset === newNextState) {
+            newNextState = undefined;
+            continue;
+          }
+        }else {
+          newNextState = undefined;
         }
         let useTime2 = tr.update(useTime);
         if (tr.hit) {
@@ -846,15 +869,10 @@ class RuntimeAnimatorState {
         midState.interrupted = interrupted;
       }
       midState.transTime = 0;
-      let t = this.curTrans.asset;
-      if (t.isExit) {
-        let nextSM = midState.asset.stateMachine.parent ? midState.asset.stateMachine.parent : this.layer.asset.stateMachine;
-        nextState.reset(this.layer.getFirstState(nextSM));
-      } else if (t.destinationState) {
-        nextState.reset(t.destinationState);
-      } else if (t.destinationStateMachine) {
-        nextState.reset(this.layer.getFirstState(t.destinationStateMachine));
+      if(newNextState === undefined) { // 如果下一个状态没有提前查询
+        newNextState = this.findNextState(midState.asset, this.curTrans.asset);
       }
+      nextState.reset(newNextState);
       if (nextState.isValid) {
         nextState.time = this.curTrans.asset.offset || 0;
       }
