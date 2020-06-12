@@ -1,6 +1,21 @@
+import {
+  AnimationClip,
+  AnimatorConditionMode,
+  AnimatorController,
+  AnimatorControllerLayer,
+  AnimatorControllerParameter,
+  AnimatorControllerParameterType,
+  AnimatorState,
+  AnimatorStateMachine,
+  AnimatorStateTransition,
+  BlendTree,
+  BlendTreeType,
+  TransitionInterruptionSource,
+  Vec2,
+  AnimatorLayerBlendingMode
+} from "./AnimatorControllerAsset";
 import { clamp01, log } from "cc";
-import { AnimationClip, AnimatorConditionMode, AnimatorController, AnimatorControllerLayer, AnimatorControllerParameter, AnimatorControllerParameterType, AnimatorLayerBlendingMode, AnimatorState, AnimatorStateMachine, AnimatorStateTransition, BlendTree, BlendTreeType, TransitionInterruptionSource, Vec2 } from "./AnimatorControllerAsset";
-import { fixPoint, sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar } from "./BlendTreeUtils";
+import { sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar, fixPoint } from "./BlendTreeUtils";
 import { ExList } from "./ExtList";
 
 export interface IAnimationSource {
@@ -237,6 +252,7 @@ export class RuntimeAnimatorController {
           state.stateMachine = sm;
           if (state.motion && state.motion.type === 1) {
             let bt = state.motion as BlendTree;
+            bt.blendType = ~~bt.blendType;
             if (bt.blendType > BlendTreeType.Simple1D && bt.blendType < BlendTreeType.Direct) {
               bt.children.forEach(c => fixPoint(c.position));
             }
@@ -640,7 +656,7 @@ class RuntimeAnimatorState {
     }
 
     if (baseWeight > 0) {
-      switch (~~bt.blendType) {
+      switch (bt.blendType) {
         case BlendTreeType.Simple1D: {
           let param = this.ctr.getNumber(bt.blendParameter);
           if (param <= this.getChildThreshold(bt, 0)) {
