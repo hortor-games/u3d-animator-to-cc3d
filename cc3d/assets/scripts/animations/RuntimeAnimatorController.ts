@@ -237,7 +237,9 @@ export class RuntimeAnimatorController {
           state.stateMachine = sm;
           if (state.motion && state.motion.type === 1) {
             let bt = state.motion as BlendTree;
-            bt.children.forEach(c => fixPoint(c.position));
+            if (bt.blendType > BlendTreeType.Simple1D && bt.blendType < BlendTreeType.Direct) {
+              bt.children.forEach(c => fixPoint(c.position));
+            }
           }
           // sm.statesMap[state.name] = state;
           state.transitions.forEach(t => processTrans(t));
