@@ -1,21 +1,7 @@
-import {
-  AnimationClip,
-  AnimatorConditionMode,
-  AnimatorController,
-  AnimatorControllerLayer,
-  AnimatorControllerParameter,
-  AnimatorControllerParameterType,
-  AnimatorState,
-  AnimatorStateMachine,
-  AnimatorStateTransition,
-  BlendTree,
-  BlendTreeType,
-  TransitionInterruptionSource,
-  Vec2,
-  AnimatorLayerBlendingMode
-} from "./AnimatorControllerAsset";
 import { clamp01, log } from "cc";
-import { sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar, fixPoint } from "./BlendTreeUtils";
+import { AnimationClip, AnimatorConditionMode, AnimatorController, AnimatorControllerLayer, AnimatorControllerParameter, AnimatorControllerParameterType, AnimatorLayerBlendingMode, AnimatorState, AnimatorStateMachine, AnimatorStateTransition, BlendTree, BlendTreeType, TransitionInterruptionSource, Vec2 } from "./AnimatorControllerAsset";
+import { fixPoint, sampleWeightsCartesian, sampleWeightsDirectional, sampleWeightsPolar } from "./BlendTreeUtils";
+import { ExList } from "./ExtList";
 
 export interface IAnimationSource {
   getClipDuration(name: string): number;
@@ -314,43 +300,6 @@ export class RuntimeAnimatorController {
       return;
     }
     l.crossFade(stateName, hasFixedDuration, transitionDuration, timeOffset, normalizedTransitionTime);
-  }
-}
-
-export class ExList<T> {
-  private readonly factory: () => T;
-  private _length: number = 0;
-  private capacity: number = 0;
-
-  public get length(): number {
-    return this._length;
-  }
-
-  public set length(len: number) {
-    this._length = len;
-    while (this.capacity < len) {
-      this[this.capacity++] = this.factory();
-    }
-  }
-
-  reset() {
-    this._length = 0;
-  }
-
-  constructor(factory: () => T) {
-    this.factory = factory;
-  }
-
-  add(v: T) {
-    this[this.length++] = v;
-  }
-
-  forEach(callbackfn: (value: T, index?: number) => boolean | void, thisArg?: any) {
-    for (let i = 0; i < this._length; i++) {
-      if (callbackfn.call(thisArg, this[i], i) === false) {
-        return;
-      }
-    }
   }
 }
 
@@ -840,12 +789,12 @@ class RuntimeAnimatorState {
           break;
         }
         if (!tr.asset.canTransitionToSelf) { // 如果不能变换到自身，需要提前查询下一个状态
-          newNextState = this.findNextState(this.curTrans.isValid? this.curTrans.state.asset: midState.asset, tr.asset);
-          if(newNextState && midState.asset === newNextState) {
+          newNextState = this.findNextState(this.curTrans.isValid ? this.curTrans.state.asset : midState.asset, tr.asset);
+          if (newNextState && midState.asset === newNextState) {
             newNextState = undefined;
             continue;
           }
-        }else {
+        } else {
           newNextState = undefined;
         }
         let useTime2 = tr.update(useTime);
@@ -869,7 +818,7 @@ class RuntimeAnimatorState {
         midState.interrupted = interrupted;
       }
       midState.transTime = 0;
-      if(newNextState === undefined) { // 如果下一个状态没有提前查询
+      if (newNextState === undefined) { // 如果下一个状态没有提前查询
         newNextState = this.findNextState(midState.asset, this.curTrans.asset);
       }
       nextState.reset(newNextState);

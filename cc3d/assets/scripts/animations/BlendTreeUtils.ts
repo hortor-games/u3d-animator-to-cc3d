@@ -1,6 +1,6 @@
+import { clamp, lerp, Vec2 } from "cc";
 import { BlendTree } from "./AnimatorControllerAsset";
-import { clamp, Vec2, lerp } from "cc";
-import { ExList } from "./RuntimeAnimatorController";
+import { ExList } from "./ExtList";
 
 let tmpPoint1: Vec2 = new Vec2();
 let tmpPoint2: Vec2 = new Vec2();
@@ -109,6 +109,10 @@ export function sampleWeightsDirectional(samplePoint: Vec2, bt: BlendTree, weigh
       rp1 = (i + 1) % rads.length;
       break;
     }
+  }
+  if (rp0 === undefined) {
+    rp0 = rads.length - 1;
+    rp1 = 0;
   }
   let deltaRad = rads[rp1].rad - rads[rp0].rad;
   if (deltaRad < 0) {
