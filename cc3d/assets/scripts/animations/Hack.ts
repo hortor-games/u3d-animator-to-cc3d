@@ -48,7 +48,12 @@ import { animation, AnimationState, Node } from "cc";
 
           let wt = this.weight;
           let bakWt = wt;
-          let path = curveInstance._cachedPath || (curveInstance._cachedPath = curveInstance._curveDetail.modifiers[0].path.replace(curveInstance._rootTarget.name + "/", ""));
+          let path: string = curveInstance._cachedPath;
+          if (!path) {
+            path = curveInstance._curveDetail.modifiers[0].path;
+            path = curveInstance._rootTarget ? path.replace(curveInstance._rootTarget.name + "/", "") : path.substr(path.indexOf("/") + 1);
+            curveInstance._cachedPath = path;
+          }
           if (this._maskInfo) {
             wt *= this._maskInfo[path] !== undefined ? this._maskInfo[path] : this._maskInfo["*"] || 0;
           }
