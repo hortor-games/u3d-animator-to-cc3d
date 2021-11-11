@@ -1,15 +1,13 @@
 {
-  "ver": "2.0.14",
+  "ver": "4.0.22",
   "importer": "typescript",
   "imported": true,
   "uuid": "03f9cdf1-5e7d-45e0-8bb7-23937df5244a",
-  "files": [
-    ".js",
-    ".trans"
-  ],
+  "files": [],
   "subMetas": {},
   "userData": {
     "importAsPlugin": false,
-    "moduleId": "project:///assets/script/animations/ExtList.js"
+    "moduleId": "project:///assets/script/animations/ExtList.js",
+    "simulateGlobals": []
   }
 }

@@ -1,15 +1,13 @@
 {
-  "ver": "2.0.14",
+  "ver": "4.0.22",
   "importer": "typescript",
   "imported": true,
   "uuid": "29129ea7-577f-4473-8d74-667c7cd5c1c9",
-  "files": [
-    ".js",
-    ".trans"
-  ],
+  "files": [],
   "subMetas": {},
   "userData": {
     "importAsPlugin": false,
-    "moduleId": "project:///assets/script/animations/AnimatorControllerAsset.js"
+    "moduleId": "project:///assets/script/animations/AnimatorControllerAsset.js",
+    "simulateGlobals": []
   }
 }

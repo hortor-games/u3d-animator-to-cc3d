@@ -1,17 +1,16 @@
-import { AnimationComponent, AnimationState, Asset, Component, JsonAsset, _decorator, SkeletalAnimationComponent, SkeletalAnimationState, AnimationClip, Socket, animation, Node } from "cc";
+import { Animation, AnimationClip, AnimationManager, AnimationState, Asset, Component, director, error, JsonAsset, Socket, _decorator } from "cc";
 import { AnimatorOverrideController } from "./AnimatorOverrideController";
-import { BlendInfo, IAnimationSource, RuntimeAnimatorController, ExList, LayerBlendInfo } from "./RuntimeAnimatorController";
+import { BlendInfo, IAnimationSource, LayerBlendInfo, RuntimeAnimatorController } from "./RuntimeAnimatorController";
 import { StateBehaviour, StateCallback } from "./StateBehaviour";
 import { StateMachineBehaviour } from "./StateMachineBehaviour";
-import { log, error } from "cc";
 
 const { ccclass, property, executionOrder } = _decorator;
 
 @ccclass("Animator")
 @executionOrder(-100)
 export class Animator extends Component implements IAnimationSource {
-  @property(AnimationComponent)
-  animation: AnimationComponent = null;
+  @property(Animation)
+  animation: Animation = null;
   @property(Asset)
   bonAsset: Asset = null;
   @property(JsonAsset)
@@ -20,30 +19,32 @@ export class Animator extends Component implements IAnimationSource {
   overrideController: AnimatorOverrideController = null;
   runtimeController: RuntimeAnimatorController;
 
-  private prePlaying: Set<AnimationState> = new Set<AnimationState>();
-  private nowPlaying: Set<AnimationState> = new Set<AnimationState>();
   private stateBehaviours: { [idx: string]: StateBehaviour[] } = {};
   private stateMachineBehaviours: { [idx: string]: StateMachineBehaviour[] } = {};
 
   private nameToState: { [idx: string]: AnimationState } = {};
-
   private useBake: boolean;
-
+  private runner: IAnimatorRunner;
 
   start() {
     window["ani"] = this;
-    if (!this.animation) {
-      this.animation = this.getComponent(SkeletalAnimationComponent);
-    }
-    if (!this.animation) {
-      error("SkeletalAnimationComponent not found");
+    let anim = this.animation || (this.animation = this.getComponent(Animation));
+    if (!anim) {
+      error("AnimationComponent not found");
       this.enabled = false;
       return;
     }
-    this.useBake = this.animation["useBakedAnimation"];
+    anim.defaultClip = null;
+    this.useBake = !!anim["useBakedAnimation"];
+    if (this.useBake) {
+      this.runner = new AnimatorRunnerBaked(this);
+    } else {
+      anim.enabled = false;
+      this.runner = new AnimatorRunnerUnbaked(this);
+    }
     if (this.bonAsset && window["bon"]) {
       if (!(<any>this.bonAsset).json) {
-        (<any>this.bonAsset).json = bon.decode(new Uint8Array(this.bonAsset.bytes()));
+        (<any>this.bonAsset).json = window["bon"].decode(new Uint8Array(this.bonAsset.bytes()));
       }
       this.runtimeController = new RuntimeAnimatorController(this, (<any>this.bonAsset).json);
     } else if (this.jsonAsset) {
@@ -55,17 +56,16 @@ export class Animator extends Component implements IAnimationSource {
         this.overrideController = this.addComponent(AnimatorOverrideController);
       }
       for (let k in overrids) {
-        let state = this.getAnimationState(overrids[k]);
-        this.overrideController.addClip(k, state && state.clip);
+        let clip = anim.clips.find(p => p.name == overrids[k]);
+        this.overrideController.addClip(k, clip);
       }
     }
     this.getComponents(StateBehaviour).forEach(p => this.addStateBehavior(p));
     this.getComponents(StateMachineBehaviour).forEach(p => this.addStateMachineBehavior(p));
-    this.animation.stop();
-    this.animation.defaultClip = null;
+
     if (!this.useBake) {
-      this.animation["_sockets"].forEach((p: Socket) => {
-        let follow = this.animation.node.getChildByPath(p.path);
+      anim["_sockets"].forEach((p: Socket) => {
+        let follow = anim.node.getChildByPath(p.path);
         if (!follow) {
           return;
         }
@@ -74,7 +74,7 @@ export class Animator extends Component implements IAnimationSource {
         }
         p.target.destroy();
       });
-      this.animation["_sockets"] = [];
+      anim["_sockets"] = [];
     }
   }
 
@@ -151,25 +151,14 @@ export class Animator extends Component implements IAnimationSource {
   public getAnimationState(name: string, layer: number = 0): AnimationState {
     let name2 = layer == 0 ? name : name + "~" + layer;
     let fast = this.nameToState[name2];
-    if (fast !== undefined) {
+    if (fast) {
       return fast;
     }
-    let ani = this.animation;
-    let name3 = name2;
-    let overrideClip = this.overrideController && this.overrideController.getClip(name);
-    if (overrideClip) {
-      name3 = "*" + name3;
+    let clip = this.overrideController && this.overrideController.getClip(name);
+    if (!clip) {
+      clip = this.animation.clips.find(p => p.name == name);
     }
-    let state = ani.getState(name3);
-    if (!state) {
-      let clip = overrideClip || ani.clips.find(p => p.name == name);
-      if (clip) {
-        state = ani.createState(clip, name3);
-      }
-    }
-    if (!state) {
-      state = null;
-    }
+    let state = this.runner.createAnimationState(clip, name2, layer);
     this.nameToState[name2] = state;
     return state;
   }
@@ -181,69 +170,8 @@ export class Animator extends Component implements IAnimationSource {
 
   update(dt: number) {
     this.runtimeController.update(dt);
-    this.nowPlaying.clear();
     let blendInfo = this.runtimeController.blendInfo;
-    if (this.useBake) {
-      this.updateSimple(blendInfo);
-    } else {
-      this.updateBlend(blendInfo);
-    }
-
-    this.prePlaying.forEach(state => {
-      if (!this.nowPlaying.has(state)) {
-        state.stop();
-        state.weight = 0;
-        delete (state["_maskInfo"]);
-      }
-    });
-    let tmp = this.prePlaying;
-    this.prePlaying = this.nowPlaying;
-    this.nowPlaying = tmp;
-  }
-
-  private updateSimple(lbis: LayerBlendInfo[]) {
-    let info: BlendInfo;
-    let max = Number.NEGATIVE_INFINITY;
-    lbis.forEach(lbi => {
-      lbi.infos.forEach(p => {
-        let w = p.weight * lbi.weight;
-        if (w >= max) {
-          max = w;
-          info = p;
-        }
-      })
-    });
-
-    let state = this.getAnimationState(info.clip);
-    if (!state) {
-      return;
-    }
-    if (!this.prePlaying.has(state)) {
-      state.play();
-      state.pause();
-    }
-    state.weight = 1;
-    this.nowPlaying.add(state);
-    state.update(info.time * info.duration - state.time)
-  }
-
-  private updateBlend(lbis: LayerBlendInfo[]) {
-    lbis.forEach(lbi => {
-      lbi.infos.forEach(info => {
-        let state = this.getAnimationState(info.clip, lbi.idx);
-        if (!state) {
-          return;
-        }
-        if (!this.prePlaying.has(state)) {
-          state.play();
-          state.pause();
-        }
-        state.weight = info.weight;
-        state["_maskInfo"] = lbi.maskInfo;
-        this.nowPlaying.add(state);
-        state.update(info.time * info.duration - state.time)
-      });
-    });
+    this.runner.update(blendInfo);
   }
 }
 
@@ -256,4 +184,129 @@ export type AnimatorStateInfo = {
   normalizedTime: number;
   speed: number;
   speedMultiplier: number;
+}
+
+interface IAnimatorRunner {
+  createAnimationState(clip: AnimationClip, name: string, layer: number): AnimationState;
+  update(lbis: LayerBlendInfo[]): void;
+}
+
+class AnimatorRunnerBaked implements IAnimatorRunner {
+  animator: Animator;
+  private prePlaying: Set<AnimationState> = new Set<AnimationState>();
+  private nowPlaying: Set<AnimationState> = new Set<AnimationState>();
+  constructor(animator: Animator) {
+    this.animator = animator;
+  }
+
+  createAnimationState(clip: AnimationClip, name: string, layer: number): AnimationState {
+    return this.animator.animation.createState(clip, name);
+  }
+
+  update(lbis: LayerBlendInfo[]): void {
+    let info: BlendInfo;
+    let max = Number.NEGATIVE_INFINITY;
+    lbis.forEach(lbi => {
+      lbi.infos.forEach(p => {
+        let w = p.weight * lbi.weight;
+        if (w >= max) {
+          max = w;
+          info = p;
+        }
+      })
+    });
+
+    this.nowPlaying.clear();
+
+    let state = this.animator.getAnimationState(info.clip);
+    if (!state) {
+      return;
+    }
+    if (!this.prePlaying.has(state)) {
+      state.play();
+      state.pause();
+    }
+    state.weight = 1;
+    this.nowPlaying.add(state);
+    state.update(info.time * info.duration - state.time);
+
+    this.prePlaying.forEach(state => {
+      if (!this.nowPlaying.has(state)) {
+        state.stop();
+        state.weight = 0;
+        // delete (state["_maskInfo"]);
+      }
+    });
+
+    let tmp = this.prePlaying;
+    this.prePlaying = this.nowPlaying;
+    this.nowPlaying = tmp;
+  }
+}
+
+let _BlendStateBufferCtor: any;
+function BlendStateBuffer(): any {
+  if (_BlendStateBufferCtor) {
+    return _BlendStateBufferCtor();
+  }
+  _BlendStateBufferCtor = (director.getSystem(AnimationManager.ID) as AnimationManager).blendState.constructor;
+  return _BlendStateBufferCtor;
+}
+
+
+class AnimatorRunnerUnbaked implements IAnimatorRunner {
+  animator: Animator;
+  blendStateBuffer: any;
+  constructor(animator: Animator) {
+    this.animator = animator;
+    this.blendStateBuffer = new (BlendStateBuffer())();
+  }
+
+  createAnimationState(clip: AnimationClip, name: string, layer: number): AnimationState {
+    let avatarMask = this.animator.runtimeController.layers[layer].asset.avatarMask;
+    if (avatarMask) {
+      let clip2 = Object.assign(new (clip.constructor as any)(), clip);
+      let exot = clip2._exoticAnimation = Object.assign(new (clip2._exoticAnimation.constructor)(), clip2._exoticAnimation);
+      exot._nodeAnimations = exot._nodeAnimations.slice();
+      for (let i = exot._nodeAnimations.length; --i >= 0;) {
+        let _path: string = exot._nodeAnimations[i].path;
+        let found = false;
+        for (let j = avatarMask.length; --j >= 0;) {
+          if (avatarMask[j] === "") {
+            continue;
+          }
+          let idx = _path.lastIndexOf(avatarMask[j]);
+          if (idx >= 0 && idx + avatarMask[j].length == _path.length) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          exot._nodeAnimations.splice(i, 1);
+        }
+      }
+      clip = clip2;
+    }
+    let state = new AnimationState(clip, name);
+    state.initialize(this.animator.animation.node, this.blendStateBuffer);
+    state.weight = 0;
+    return state;
+  }
+
+  update(lbis: LayerBlendInfo[]): void {
+    lbis.forEach(lbi => {
+      lbi.infos.forEach(info => {
+        let state = this.animator.getAnimationState(info.clip, lbi.idx);
+        if (!state) {
+          return;
+        }
+        state.time = info.time * info.duration;
+        state.weight = info.weight;
+        // state["_maskInfo"] = lbi.maskInfo;
+        state.sample();
+        state.weight = 0;
+      });
+    });
+    this.blendStateBuffer.apply();
+  }
 }

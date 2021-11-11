@@ -1,15 +1,13 @@
 {
-  "ver": "2.0.14",
+  "ver": "4.0.22",
   "importer": "typescript",
   "imported": true,
   "uuid": "0a585fa5-1552-48ef-a8fb-dbc6c1394290",
-  "files": [
-    ".js",
-    ".trans"
-  ],
+  "files": [],
   "subMetas": {},
   "userData": {
     "importAsPlugin": false,
-    "moduleId": "project:///assets/script/animations/AnimatorClipPair.js"
+    "moduleId": "project:///assets/script/animations/AnimatorClipPair.js",
+    "simulateGlobals": []
   }
 }

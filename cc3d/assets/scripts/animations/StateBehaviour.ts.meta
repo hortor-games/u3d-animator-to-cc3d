@@ -1,15 +1,13 @@
 {
-  "ver": "2.0.14",
+  "ver": "4.0.22",
   "importer": "typescript",
   "imported": true,
   "uuid": "bedc3d08-88f7-4c2c-b917-09be3d7481d0",
-  "files": [
-    ".js",
-    ".trans"
-  ],
+  "files": [],
   "subMetas": {},
   "userData": {
     "importAsPlugin": false,
-    "moduleId": "project:///assets/script/animations/StateBehaviour.js"
+    "moduleId": "project:///assets/script/animations/StateBehaviour.js",
+    "simulateGlobals": []
   }
 }

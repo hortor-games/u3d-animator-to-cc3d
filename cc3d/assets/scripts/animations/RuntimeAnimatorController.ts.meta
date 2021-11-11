@@ -1,15 +1,13 @@
 {
-  "ver": "2.0.14",
+  "ver": "4.0.22",
   "importer": "typescript",
   "imported": true,
   "uuid": "a01997fb-5994-484d-93d1-0ce7d9cffd60",
-  "files": [
-    ".js",
-    ".trans"
-  ],
+  "files": [],
   "subMetas": {},
   "userData": {
     "importAsPlugin": false,
-    "moduleId": "project:///assets/script/animations/RuntimeAnimatorController.js"
+    "moduleId": "project:///assets/script/animations/RuntimeAnimatorController.js",
+    "simulateGlobals": []
   }
 }
